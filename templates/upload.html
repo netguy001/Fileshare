@@ -203,7 +203,7 @@
             `;
         }
 
-        // FIXED UPLOAD PROGRESS TRACKING
+        // ENHANCED UPLOAD PROGRESS TRACKING WITH DETAILED STATS
         document.getElementById('uploadForm').addEventListener('submit', function (e) {
             e.preventDefault(); // Prevent default form submission
 
@@ -212,16 +212,26 @@
             const progressBar = document.getElementById('progressBar');
             const progressElement = progressBar.querySelector('.progress-bar');
             const progressText = document.getElementById('progressText');
+            const uploadStats = document.getElementById('uploadStats');
+            const uploadedSizeSpan = document.getElementById('uploadedSize');
+            const uploadSpeedSpan = document.getElementById('uploadSpeed');
+            const uploadETASpan = document.getElementById('uploadETA');
 
             if (fileInput.files.length === 0) {
                 alert('Please select files to upload.');
                 return;
             }
 
-            // Show progress bar and update button
+            // Show progress bar and stats
             progressBar.style.display = 'block';
+            uploadStats.style.display = 'block';
             uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
             uploadBtn.disabled = true;
+
+            // Progress tracking variables
+            let startTime = Date.now();
+            let lastLoaded = 0;
+            let lastTime = startTime;
 
             // Create FormData object
             const formData = new FormData();
@@ -232,12 +242,51 @@
             // Create XMLHttpRequest for real progress tracking
             const xhr = new XMLHttpRequest();
 
-            // Track upload progress
+            // Track upload progress with enhanced stats
             xhr.upload.addEventListener('progress', function (e) {
                 if (e.lengthComputable) {
+                    const currentTime = Date.now();
+                    const timeElapsed = (currentTime - startTime) / 1000; // in seconds
                     const percentComplete = (e.loaded / e.total) * 100;
+
+                    // Update progress bar
                     progressElement.style.width = percentComplete + '%';
                     progressText.textContent = Math.round(percentComplete) + '%';
+
+                    // Calculate uploaded size
+                    const uploadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
+                    const totalMB = (e.total / (1024 * 1024)).toFixed(2);
+                    uploadedSizeSpan.textContent = `${uploadedMB} / ${totalMB} MB`;
+
+                    // Calculate speed (MB/s)
+                    if (timeElapsed > 0) {
+                        const timeDiff = (currentTime - lastTime) / 1000;
+                        const loadedDiff = e.loaded - lastLoaded;
+
+                        if (timeDiff > 0.5) { // Update speed every 0.5 seconds
+                            const currentSpeed = (loadedDiff / timeDiff) / (1024 * 1024); // MB/s
+                            const avgSpeed = (e.loaded / timeElapsed) / (1024 * 1024); // Average MB/s
+                            const displaySpeed = currentSpeed > 0 ? currentSpeed : avgSpeed;
+                            uploadSpeedSpan.textContent = `${displaySpeed.toFixed(2)} MB/s`;
+
+                            // Calculate ETA
+                            if (displaySpeed > 0) {
+                                const remainingBytes = e.total - e.loaded;
+                                const remainingSeconds = remainingBytes / (displaySpeed * 1024 * 1024);
+
+                                if (remainingSeconds > 0 && remainingSeconds < Infinity) {
+                                    const minutes = Math.floor(remainingSeconds / 60);
+                                    const seconds = Math.round(remainingSeconds % 60);
+                                    uploadETASpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                } else {
+                                    uploadETASpan.textContent = '--:--';
+                                }
+                            }
+
+                            lastLoaded = e.loaded;
+                            lastTime = currentTime;
+                        }
+                    }
                 }
             });
 
@@ -246,6 +295,11 @@
                 if (xhr.status === 200) {
                     progressElement.style.width = '100%';
                     progressText.textContent = '100%';
+                    uploadSpeedSpan.textContent = 'Complete';
+                    uploadETASpan.textContent = '0:00';
+
+                    // Show success popup
+                    showSuccessPopup(fileInput.files);
 
                     // Parse the response to handle redirects properly
                     try {
@@ -254,7 +308,7 @@
                         if (response.redirect) {
                             setTimeout(() => {
                                 window.location.href = response.redirect;
-                            }, 500);
+                            }, 3000);
                             return;
                         }
                     } catch (e) {
@@ -265,7 +319,7 @@
                     setTimeout(() => {
                         // Reload current page to show flash messages
                         window.location.reload();
-                    }, 1000);
+                    }, 3000);
 
                 } else {
                     // Handle error
@@ -275,10 +329,13 @@
                     uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
                     uploadBtn.disabled = false;
 
+                    showErrorPopup('Upload failed. Please try again.');
+
                     // Hide progress bar after delay
                     setTimeout(() => {
                         progressBar.style.display = 'none';
-                    }, 3000);
+                        uploadStats.style.display = 'none';
+                    }, 5000);
                 }
             });
 
@@ -290,16 +347,89 @@
                 uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
                 uploadBtn.disabled = false;
 
+                showErrorPopup('Network error occurred. Please check your connection and try again.');
+
                 // Hide progress bar after delay
                 setTimeout(() => {
                     progressBar.style.display = 'none';
-                }, 3000);
+                    uploadStats.style.display = 'none';
+                }, 5000);
             });
 
             // Send the request
             xhr.open('POST', this.action || window.location.pathname);
             xhr.send(formData);
         });
+
+        // Success popup function
+        function showSuccessPopup(files) {
+            const popup = document.createElement('div');
+            popup.className = 'position-fixed top-50 start-50 translate-middle';
+            popup.style.zIndex = '9999';
+            popup.innerHTML = `
+                <div class="alert alert-success alert-dismissible shadow-lg border-0" style="min-width: 400px;">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 2rem;"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="alert-heading mb-1">Upload Successful!</h5>
+                            <p class="mb-0">
+                                ${files.length === 1 ?
+                    `"${files[0].name}" has been uploaded successfully.` :
+                    `${files.length} files have been uploaded successfully.`
+                }
+                            </p>
+                        </div>
+                        <button type="button" class="btn-close" onclick="this.parentElement.parentElement.parentElement.remove()"></button>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-success">
+                            <i class="bi bi-info-circle"></i> Redirecting to view your files...
+                        </small>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(popup);
+
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.remove();
+                }
+            }, 3000);
+        }
+
+        // Error popup function
+        function showErrorPopup(message) {
+            const popup = document.createElement('div');
+            popup.className = 'position-fixed top-50 start-50 translate-middle';
+            popup.style.zIndex = '9999';
+            popup.innerHTML = `
+                <div class="alert alert-danger alert-dismissible shadow-lg border-0" style="min-width: 400px;">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 2rem;"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="alert-heading mb-1">Upload Failed</h5>
+                            <p class="mb-0">${message}</p>
+                        </div>
+                        <button type="button" class="btn-close" onclick="this.parentElement.parentElement.parentElement.remove()"></button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(popup);
+
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.remove();
+                }
+            }, 5000);
+        }
 
         // File size validation and preview
         document.getElementById('file').addEventListener('change', function (e) {
