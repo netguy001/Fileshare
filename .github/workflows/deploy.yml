@@ -43,7 +43,7 @@ jobs:
           ENVEOF
 
           # Restart Gunicorn systemd service
-          sudo systemctl daemon-reexec
+          sudo systemctl daemon-reload
           sudo systemctl restart gunicorn
 
           # Reload Nginx
