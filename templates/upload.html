@@ -203,10 +203,8 @@
             `;
         }
 
-        // ENHANCED UPLOAD PROGRESS TRACKING WITH DETAILED STATS
+        // SIMPLIFIED WORKING UPLOAD WITH PROGRESS
         document.getElementById('uploadForm').addEventListener('submit', function (e) {
-            e.preventDefault(); // Prevent default form submission
-
             const fileInput = document.getElementById('file');
             const uploadBtn = document.getElementById('uploadBtn');
             const progressBar = document.getElementById('progressBar');
@@ -219,147 +217,147 @@
 
             if (fileInput.files.length === 0) {
                 alert('Please select files to upload.');
+                e.preventDefault();
                 return;
             }
 
-            // Show progress bar and stats
-            progressBar.style.display = 'block';
-            uploadStats.style.display = 'block';
-            uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
-            uploadBtn.disabled = true;
+            // Check if we should use normal form submission for better compatibility
+            const useNormalSubmit = true; // Set to false to use XMLHttpRequest
 
-            // Progress tracking variables
-            let startTime = Date.now();
-            let lastLoaded = 0;
-            let lastTime = startTime;
+            if (useNormalSubmit) {
+                // Show progress bar and update button
+                progressBar.style.display = 'block';
+                uploadStats.style.display = 'block';
+                uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+                uploadBtn.disabled = true;
 
-            // Create FormData object
-            const formData = new FormData();
-            for (let i = 0; i < fileInput.files.length; i++) {
-                formData.append('file', fileInput.files[i]);
-            }
+                // Calculate total size for display
+                let totalSize = 0;
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    totalSize += fileInput.files[i].size;
+                }
+                const totalMB = (totalSize / (1024 * 1024)).toFixed(2);
+                uploadedSizeSpan.textContent = `0 / ${totalMB} MB`;
+                uploadSpeedSpan.textContent = 'Uploading...';
+                uploadETASpan.textContent = 'Please wait...';
 
-            // Create XMLHttpRequest for real progress tracking
-            const xhr = new XMLHttpRequest();
+                // Simulate progress for visual feedback during normal form submit
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 15;
+                    if (progress > 90) {
+                        progress = 90; // Stop at 90% until actual completion
+                    }
+                    progressElement.style.width = progress + '%';
+                    progressText.textContent = Math.round(progress) + '%';
+                }, 200);
 
-            // Track upload progress with enhanced stats
-            xhr.upload.addEventListener('progress', function (e) {
-                if (e.lengthComputable) {
-                    const currentTime = Date.now();
-                    const timeElapsed = (currentTime - startTime) / 1000; // in seconds
-                    const percentComplete = (e.loaded / e.total) * 100;
+                // Store interval reference to clear it later
+                window.uploadProgressInterval = progressInterval;
 
-                    // Update progress bar
-                    progressElement.style.width = percentComplete + '%';
-                    progressText.textContent = Math.round(percentComplete) + '%';
+                // Let the form submit normally
+                return true;
+            } else {
+                // Use XMLHttpRequest with real progress tracking
+                e.preventDefault();
 
-                    // Calculate uploaded size
-                    const uploadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
-                    const totalMB = (e.total / (1024 * 1024)).toFixed(2);
-                    uploadedSizeSpan.textContent = `${uploadedMB} / ${totalMB} MB`;
+                // Show progress bar and stats
+                progressBar.style.display = 'block';
+                uploadStats.style.display = 'block';
+                uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+                uploadBtn.disabled = true;
 
-                    // Calculate speed (MB/s)
-                    if (timeElapsed > 0) {
-                        const timeDiff = (currentTime - lastTime) / 1000;
-                        const loadedDiff = e.loaded - lastLoaded;
+                // Progress tracking variables
+                let startTime = Date.now();
 
-                        if (timeDiff > 0.5) { // Update speed every 0.5 seconds
-                            const currentSpeed = (loadedDiff / timeDiff) / (1024 * 1024); // MB/s
-                            const avgSpeed = (e.loaded / timeElapsed) / (1024 * 1024); // Average MB/s
-                            const displaySpeed = currentSpeed > 0 ? currentSpeed : avgSpeed;
-                            uploadSpeedSpan.textContent = `${displaySpeed.toFixed(2)} MB/s`;
+                // Create FormData object
+                const formData = new FormData();
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    formData.append('file', fileInput.files[i]);
+                }
+
+                // Create XMLHttpRequest for real progress tracking
+                const xhr = new XMLHttpRequest();
+
+                // Track upload progress
+                xhr.upload.addEventListener('progress', function (e) {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+
+                        // Update progress bar
+                        progressElement.style.width = percentComplete + '%';
+                        progressText.textContent = Math.round(percentComplete) + '%';
+
+                        // Calculate uploaded size
+                        const uploadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
+                        const totalMB = (e.total / (1024 * 1024)).toFixed(2);
+                        uploadedSizeSpan.textContent = `${uploadedMB} / ${totalMB} MB`;
+
+                        // Calculate speed
+                        const timeElapsed = (Date.now() - startTime) / 1000;
+                        if (timeElapsed > 0) {
+                            const speed = (e.loaded / timeElapsed) / (1024 * 1024);
+                            uploadSpeedSpan.textContent = `${speed.toFixed(2)} MB/s`;
 
                             // Calculate ETA
-                            if (displaySpeed > 0) {
+                            if (speed > 0) {
                                 const remainingBytes = e.total - e.loaded;
-                                const remainingSeconds = remainingBytes / (displaySpeed * 1024 * 1024);
-
-                                if (remainingSeconds > 0 && remainingSeconds < Infinity) {
-                                    const minutes = Math.floor(remainingSeconds / 60);
-                                    const seconds = Math.round(remainingSeconds % 60);
-                                    uploadETASpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                                } else {
-                                    uploadETASpan.textContent = '--:--';
-                                }
+                                const remainingSeconds = remainingBytes / (speed * 1024 * 1024);
+                                const minutes = Math.floor(remainingSeconds / 60);
+                                const seconds = Math.round(remainingSeconds % 60);
+                                uploadETASpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
                             }
-
-                            lastLoaded = e.loaded;
-                            lastTime = currentTime;
                         }
                     }
-                }
-            });
+                });
 
-            // Handle completion
-            xhr.addEventListener('load', function () {
-                if (xhr.status === 200) {
-                    progressElement.style.width = '100%';
-                    progressText.textContent = '100%';
-                    uploadSpeedSpan.textContent = 'Complete';
-                    uploadETASpan.textContent = '0:00';
+                // Handle completion
+                xhr.addEventListener('load', function () {
+                    if (xhr.status === 200) {
+                        progressElement.style.width = '100%';
+                        progressText.textContent = '100%';
+                        uploadSpeedSpan.textContent = 'Complete';
+                        uploadETASpan.textContent = '0:00';
 
-                    // Show success popup
-                    showSuccessPopup(fileInput.files);
+                        showSuccessPopup(fileInput.files);
 
-                    // Parse the response to handle redirects properly
-                    try {
-                        // If server sends JSON response with redirect info
-                        const response = JSON.parse(xhr.responseText);
-                        if (response.redirect) {
-                            setTimeout(() => {
-                                window.location.href = response.redirect;
-                            }, 3000);
-                            return;
-                        }
-                    } catch (e) {
-                        // Response is not JSON, handle as HTML redirect
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        handleUploadError('Upload failed. Please try again.');
                     }
+                });
 
-                    // Show success message and redirect to upload page with success
-                    setTimeout(() => {
-                        // Reload current page to show flash messages
-                        window.location.reload();
-                    }, 3000);
+                xhr.addEventListener('error', function () {
+                    handleUploadError('Network error. Please check your connection.');
+                });
 
-                } else {
-                    // Handle error
-                    progressElement.classList.remove('bg-success');
-                    progressElement.classList.add('bg-danger');
-                    progressText.textContent = 'Upload failed';
-                    uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
-                    uploadBtn.disabled = false;
-
-                    showErrorPopup('Upload failed. Please try again.');
-
-                    // Hide progress bar after delay
-                    setTimeout(() => {
-                        progressBar.style.display = 'none';
-                        uploadStats.style.display = 'none';
-                    }, 5000);
-                }
-            });
-
-            // Handle errors
-            xhr.addEventListener('error', function () {
-                progressElement.classList.remove('bg-success');
-                progressElement.classList.add('bg-danger');
-                progressText.textContent = 'Upload failed';
-                uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
-                uploadBtn.disabled = false;
-
-                showErrorPopup('Network error occurred. Please check your connection and try again.');
-
-                // Hide progress bar after delay
-                setTimeout(() => {
-                    progressBar.style.display = 'none';
-                    uploadStats.style.display = 'none';
-                }, 5000);
-            });
-
-            // Send the request
-            xhr.open('POST', this.action || window.location.pathname);
-            xhr.send(formData);
+                // Send the request
+                xhr.open('POST', this.action || window.location.pathname);
+                xhr.send(formData);
+            }
         });
+
+        // Handle upload errors
+        function handleUploadError(message) {
+            const uploadBtn = document.getElementById('uploadBtn');
+            const progressBar = document.getElementById('progressBar');
+            const progressElement = progressBar.querySelector('.progress-bar');
+            const uploadStats = document.getElementById('uploadStats');
+
+            progressElement.classList.remove('bg-success');
+            progressElement.classList.add('bg-danger');
+            uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
+            uploadBtn.disabled = false;
+
+            showErrorPopup(message);
+
+            setTimeout(() => {
+                progressBar.style.display = 'none';
+                uploadStats.style.display = 'none';
+            }, 5000);
+        }
 
         // Success popup function
         function showSuccessPopup(files) {
