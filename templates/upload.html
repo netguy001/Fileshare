@@ -115,6 +115,24 @@
                                 </div>
                             </div>
 
+                            <!-- Upload Statistics -->
+                            <div class="mb-3" id="uploadStats" style="display: none;">
+                                <div class="row text-center">
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Uploaded</small>
+                                        <div class="fw-bold" id="uploadedSize">0 / 0 MB</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Speed</small>
+                                        <div class="fw-bold text-info" id="uploadSpeed">0 MB/s</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">ETA</small>
+                                        <div class="fw-bold text-warning" id="uploadETA">--:--</div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="d-grid gap-2">
                                 <button type="submit" class="btn btn-success btn-lg shadow" id="uploadBtn">
                                     <i class="bi bi-cloud-upload"></i> Upload Files
@@ -203,8 +221,10 @@
             `;
         }
 
-        // SIMPLIFIED WORKING UPLOAD WITH PROGRESS
+        // REAL-TIME UPLOAD PROGRESS TRACKING
         document.getElementById('uploadForm').addEventListener('submit', function (e) {
+            e.preventDefault(); // Always prevent default form submission
+
             const fileInput = document.getElementById('file');
             const uploadBtn = document.getElementById('uploadBtn');
             const progressBar = document.getElementById('progressBar');
@@ -217,126 +237,146 @@
 
             if (fileInput.files.length === 0) {
                 alert('Please select files to upload.');
-                e.preventDefault();
                 return;
             }
 
-            // Check if we should use normal form submission for better compatibility
-            const useNormalSubmit = true; // Set to false to use XMLHttpRequest
+            // Show progress bar and stats
+            progressBar.style.display = 'block';
+            uploadStats.style.display = 'block';
+            uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+            uploadBtn.disabled = true;
 
-            if (useNormalSubmit) {
-                // Show progress bar and update button
-                progressBar.style.display = 'block';
-                uploadStats.style.display = 'block';
-                uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
-                uploadBtn.disabled = true;
+            // Calculate total size
+            let totalSize = 0;
+            for (let i = 0; i < fileInput.files.length; i++) {
+                totalSize += fileInput.files[i].size;
+            }
+            const totalMB = (totalSize / (1024 * 1024)).toFixed(2);
+            uploadedSizeSpan.textContent = `0 / ${totalMB} MB`;
+            uploadSpeedSpan.textContent = 'Starting...';
+            uploadETASpan.textContent = 'Calculating...';
 
-                // Calculate total size for display
-                let totalSize = 0;
-                for (let i = 0; i < fileInput.files.length; i++) {
-                    totalSize += fileInput.files[i].size;
-                }
-                const totalMB = (totalSize / (1024 * 1024)).toFixed(2);
-                uploadedSizeSpan.textContent = `0 / ${totalMB} MB`;
-                uploadSpeedSpan.textContent = 'Uploading...';
-                uploadETASpan.textContent = 'Please wait...';
+            // Progress tracking variables
+            let startTime = Date.now();
+            let lastTime = startTime;
+            let lastLoaded = 0;
 
-                // Simulate progress for visual feedback during normal form submit
-                let progress = 0;
-                const progressInterval = setInterval(() => {
-                    progress += Math.random() * 15;
-                    if (progress > 90) {
-                        progress = 90; // Stop at 90% until actual completion
-                    }
-                    progressElement.style.width = progress + '%';
-                    progressText.textContent = Math.round(progress) + '%';
-                }, 200);
+            // Create FormData object
+            const formData = new FormData();
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append('file', fileInput.files[i]);
+            }
 
-                // Store interval reference to clear it later
-                window.uploadProgressInterval = progressInterval;
+            // Add upload mode
+            const uploadMode = document.querySelector('input[name="uploadMode"]:checked').id;
+            formData.append('uploadMode', uploadMode);
 
-                // Let the form submit normally
-                return true;
-            } else {
-                // Use XMLHttpRequest with real progress tracking
-                e.preventDefault();
+            // Create XMLHttpRequest for real progress tracking
+            const xhr = new XMLHttpRequest();
 
-                // Show progress bar and stats
-                progressBar.style.display = 'block';
-                uploadStats.style.display = 'block';
-                uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
-                uploadBtn.disabled = true;
+            // Track upload progress
+            xhr.upload.addEventListener('progress', function (e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    const currentTime = Date.now();
 
-                // Progress tracking variables
-                let startTime = Date.now();
+                    // Update progress bar
+                    progressElement.style.width = percentComplete + '%';
+                    progressText.textContent = Math.round(percentComplete) + '%';
 
-                // Create FormData object
-                const formData = new FormData();
-                for (let i = 0; i < fileInput.files.length; i++) {
-                    formData.append('file', fileInput.files[i]);
-                }
+                    // Calculate uploaded size
+                    const uploadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
+                    const totalMB = (e.total / (1024 * 1024)).toFixed(2);
+                    uploadedSizeSpan.textContent = `${uploadedMB} / ${totalMB} MB`;
 
-                // Create XMLHttpRequest for real progress tracking
-                const xhr = new XMLHttpRequest();
+                    // Calculate speed (using a rolling average for smoother display)
+                    const timeElapsed = (currentTime - startTime) / 1000;
+                    const timeDelta = (currentTime - lastTime) / 1000;
 
-                // Track upload progress
-                xhr.upload.addEventListener('progress', function (e) {
-                    if (e.lengthComputable) {
-                        const percentComplete = (e.loaded / e.total) * 100;
+                    if (timeElapsed > 0.5) { // Start calculating after 500ms
+                        // Overall average speed
+                        const avgSpeed = (e.loaded / timeElapsed) / (1024 * 1024);
 
-                        // Update progress bar
-                        progressElement.style.width = percentComplete + '%';
-                        progressText.textContent = Math.round(percentComplete) + '%';
+                        // Instantaneous speed for smoother updates
+                        let instSpeed = 0;
+                        if (timeDelta > 0.1) { // Update every 100ms
+                            instSpeed = ((e.loaded - lastLoaded) / timeDelta) / (1024 * 1024);
+                            lastTime = currentTime;
+                            lastLoaded = e.loaded;
+                        }
 
-                        // Calculate uploaded size
-                        const uploadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
-                        const totalMB = (e.total / (1024 * 1024)).toFixed(2);
-                        uploadedSizeSpan.textContent = `${uploadedMB} / ${totalMB} MB`;
+                        // Use a mix of both for stability
+                        const displaySpeed = (avgSpeed + instSpeed) / 2;
+                        uploadSpeedSpan.textContent = `${displaySpeed.toFixed(2)} MB/s`;
 
-                        // Calculate speed
-                        const timeElapsed = (Date.now() - startTime) / 1000;
-                        if (timeElapsed > 0) {
-                            const speed = (e.loaded / timeElapsed) / (1024 * 1024);
-                            uploadSpeedSpan.textContent = `${speed.toFixed(2)} MB/s`;
+                        // Calculate ETA
+                        if (displaySpeed > 0 && percentComplete < 100) {
+                            const remainingBytes = e.total - e.loaded;
+                            const remainingSeconds = remainingBytes / (displaySpeed * 1024 * 1024);
+                            const minutes = Math.floor(remainingSeconds / 60);
+                            const seconds = Math.round(remainingSeconds % 60);
 
-                            // Calculate ETA
-                            if (speed > 0) {
-                                const remainingBytes = e.total - e.loaded;
-                                const remainingSeconds = remainingBytes / (speed * 1024 * 1024);
-                                const minutes = Math.floor(remainingSeconds / 60);
-                                const seconds = Math.round(remainingSeconds % 60);
+                            if (remainingSeconds > 3600) { // More than 1 hour
+                                const hours = Math.floor(remainingSeconds / 3600);
+                                const mins = Math.floor((remainingSeconds % 3600) / 60);
+                                uploadETASpan.textContent = `${hours}h ${mins}m`;
+                            } else if (remainingSeconds > 60) {
                                 uploadETASpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                            } else {
+                                uploadETASpan.textContent = `${Math.round(remainingSeconds)}s`;
                             }
                         }
                     }
-                });
+                }
+            });
 
-                // Handle completion
-                xhr.addEventListener('load', function () {
-                    if (xhr.status === 200) {
-                        progressElement.style.width = '100%';
-                        progressText.textContent = '100%';
-                        uploadSpeedSpan.textContent = 'Complete';
-                        uploadETASpan.textContent = '0:00';
+            // Handle completion
+            xhr.addEventListener('load', function () {
+                if (xhr.status === 200 || xhr.status === 302) {
+                    // Success
+                    progressElement.style.width = '100%';
+                    progressText.textContent = '100%';
+                    uploadSpeedSpan.textContent = 'Complete';
+                    uploadETASpan.textContent = '0:00';
 
-                        showSuccessPopup(fileInput.files);
+                    // Remove animation
+                    progressElement.classList.remove('progress-bar-animated');
 
-                        setTimeout(() => {
+                    showSuccessPopup(fileInput.files);
+
+                    setTimeout(() => {
+                        // Check if the response contains a redirect
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            if (response.redirect) {
+                                window.location.href = response.redirect;
+                            } else {
+                                window.location.reload();
+                            }
+                        } catch {
+                            // If not JSON, just reload
                             window.location.reload();
-                        }, 2000);
-                    } else {
-                        handleUploadError('Upload failed. Please try again.');
-                    }
-                });
+                        }
+                    }, 2000);
+                } else {
+                    handleUploadError('Upload failed. Server returned error ' + xhr.status);
+                }
+            });
 
-                xhr.addEventListener('error', function () {
-                    handleUploadError('Network error. Please check your connection.');
-                });
+            xhr.addEventListener('error', function () {
+                handleUploadError('Network error. Please check your connection and try again.');
+            });
 
-                // Send the request
-                xhr.open('POST', this.action || window.location.pathname);
-                xhr.send(formData);
-            }
+            xhr.addEventListener('timeout', function () {
+                handleUploadError('Upload timed out. Please try uploading smaller files or check your connection.');
+            });
+
+            // Set timeout to 10 minutes for large files
+            xhr.timeout = 600000;
+
+            // Send the request
+            xhr.open('POST', this.action || window.location.pathname);
+            xhr.send(formData);
         });
 
         // Handle upload errors
@@ -348,6 +388,7 @@
 
             progressElement.classList.remove('bg-success');
             progressElement.classList.add('bg-danger');
+            progressElement.classList.remove('progress-bar-animated');
             uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
             uploadBtn.disabled = false;
 
@@ -356,6 +397,10 @@
             setTimeout(() => {
                 progressBar.style.display = 'none';
                 uploadStats.style.display = 'none';
+                progressElement.classList.remove('bg-danger');
+                progressElement.classList.add('bg-success');
+                progressElement.classList.add('progress-bar-animated');
+                progressElement.style.width = '0%';
             }, 5000);
         }
 
