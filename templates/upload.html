@@ -203,7 +203,7 @@
             `;
         }
 
-        // REAL UPLOAD PROGRESS TRACKING
+        // FIXED UPLOAD PROGRESS TRACKING
         document.getElementById('uploadForm').addEventListener('submit', function (e) {
             e.preventDefault(); // Prevent default form submission
 
@@ -247,10 +247,26 @@
                     progressElement.style.width = '100%';
                     progressText.textContent = '100%';
 
-                    // Show success and redirect after delay
+                    // Parse the response to handle redirects properly
+                    try {
+                        // If server sends JSON response with redirect info
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.redirect) {
+                            setTimeout(() => {
+                                window.location.href = response.redirect;
+                            }, 500);
+                            return;
+                        }
+                    } catch (e) {
+                        // Response is not JSON, handle as HTML redirect
+                    }
+
+                    // Show success message and redirect to upload page with success
                     setTimeout(() => {
-                        window.location.href = xhr.responseURL || window.location.href;
-                    }, 500);
+                        // Reload current page to show flash messages
+                        window.location.reload();
+                    }, 1000);
+
                 } else {
                     // Handle error
                     progressElement.classList.remove('bg-success');
@@ -258,6 +274,11 @@
                     progressText.textContent = 'Upload failed';
                     uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
                     uploadBtn.disabled = false;
+
+                    // Hide progress bar after delay
+                    setTimeout(() => {
+                        progressBar.style.display = 'none';
+                    }, 3000);
                 }
             });
 
@@ -268,6 +289,11 @@
                 progressText.textContent = 'Upload failed';
                 uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
                 uploadBtn.disabled = false;
+
+                // Hide progress bar after delay
+                setTimeout(() => {
+                    progressBar.style.display = 'none';
+                }, 3000);
             });
 
             // Send the request
