@@ -1,0 +1,51 @@
+name: Deploy to EC2 with S3 Integration
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          cd /home/ec2-user/Fileshare
+
+          # Pull latest code
+          git pull origin main
+
+          # Install/update Python dependencies
+          pip3 install -r requirements.txt --user
+          pip3 install boto3 --user
+
+          # Create .env file with S3 configuration
+          cat << 'ENVEOF' > .env
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION=ap-south-1
+          S3_BUCKET_NAME=fileshare-aaus1bz4
+          S3_PUBLIC_URL_BASE=https://fileshare-aaus1bz4.s3.ap-south-1.amazonaws.com
+          SECRET_KEY=${{ secrets.FLASK_SECRET_KEY }}
+          ENVEOF
+
+          # Restart Gunicorn systemd service
+          sudo systemctl daemon-reexec
+          sudo systemctl restart gunicorn
+
+          # Reload Nginx
+          sudo systemctl reload nginx
+          EOF

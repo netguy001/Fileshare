@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - File Sharing Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark shadow">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-cloud-upload"></i> File Share Hub
+            </a>
+            <div class="navbar-nav ms-auto d-flex flex-row">
+                <a class="nav-link me-3" href="{{ url_for('index') }}">
+                    <i class="bi bi-house"></i> Home
+                </a>
+                <a class="nav-link me-3" href="{{ url_for('upload_file') }}">
+                    <i class="bi bi-upload"></i> Upload
+                </a>
+                <a class="nav-link" href="{{ url_for('admin_manage') }}">
+                    <i class="bi bi-gear"></i> Admin
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="bi bi-files text-primary"></i> File Dashboard</h2>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary fs-6">{{ files|length }} items available</span>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()" title="Refresh">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Breadcrumb Navigation -->
+                {% if current_folder %}
+                <nav aria-label="breadcrumb" class="mb-3">
+                    <ol class="breadcrumb bg-light p-3 rounded shadow-sm">
+                        <li class="breadcrumb-item">
+                            <a href="{{ url_for('dashboard') }}" class="text-decoration-none">
+                                <i class="bi bi-house-fill"></i> Home
+                            </a>
+                        </li>
+                        {% for crumb in breadcrumbs %}
+                        {% if loop.last %}
+                        <li class="breadcrumb-item active" aria-current="page">
+                            <i class="bi bi-folder-fill"></i> {{ crumb.name }}
+                        </li>
+                        {% else %}
+                        <li class="breadcrumb-item">
+                            <a href="{{ url_for('dashboard', folder_path=crumb.path) }}" class="text-decoration-none">
+                                <i class="bi bi-folder"></i> {{ crumb.name }}
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% endfor %}
+                    </ol>
+                </nav>
+                {% endif %}
+
+                <!-- Flash messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show"
+                    role="alert">
+                    <i class="bi bi-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' }}"></i>
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                {% if files %}
+                <div class="card shadow-lg border-0">
+                    <div class="card-header bg-gradient text-white"
+                        style="background: linear-gradient(45deg, #4c84ff, #00d4ff);">
+                        <h5 class="mb-0"><i class="bi bi-folder-open"></i> Available Files & Folders</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th scope="col">
+                                            <i class="bi bi-file-earmark"></i> Name
+                                        </th>
+                                        <th scope="col">
+                                            <i class="bi bi-hdd"></i> Size
+                                        </th>
+                                        <th scope="col">
+                                            <i class="bi bi-calendar"></i> Modified Date
+                                        </th>
+                                        <th scope="col" class="text-center">
+                                            <i class="bi bi-download"></i> Action
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in files %}
+                                    <tr class="file-row" style="transition: all 0.2s ease;">
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                {% if item.type == 'folder' %}
+                                                <div class="file-icon bg-warning bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-folder-fill text-warning fs-5"></i>
+                                                </div>
+                                                <div>
+                                                    <a href="{{ url_for('dashboard', folder_path=item.path) }}"
+                                                        class="text-decoration-none">
+                                                        <span class="fw-medium text-dark">{{ item.name }}</span>
+                                                    </a>
+                                                    <br><small class="text-secondary">FOLDER</small>
+                                                </div>
+                                                {% else %}
+                                                {% set ext = item.name.rsplit('.', 1)[1].lower() if '.' in item.name
+                                                else 'unknown' %}
+                                                {% if ext in ['jpg', 'jpeg', 'png', 'gif'] %}
+                                                <div class="file-icon bg-success bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-image text-success fs-5"></i>
+                                                </div>
+                                                {% elif ext in ['pdf'] %}
+                                                <div class="file-icon bg-danger bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-file-pdf text-danger fs-5"></i>
+                                                </div>
+                                                {% elif ext in ['doc', 'docx'] %}
+                                                <div class="file-icon bg-primary bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-file-word text-primary fs-5"></i>
+                                                </div>
+                                                {% elif ext in ['zip', 'rar'] %}
+                                                <div class="file-icon bg-warning bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-file-zip text-warning fs-5"></i>
+                                                </div>
+                                                {% elif ext in ['mp4'] %}
+                                                <div class="file-icon bg-info bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-file-play text-info fs-5"></i>
+                                                </div>
+                                                {% elif ext in ['mp3'] %}
+                                                <div class="file-icon bg-dark bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-file-music text-dark fs-5"></i>
+                                                </div>
+                                                {% elif ext in ['html'] %}
+                                                <div class="file-icon bg-info bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-file-code text-info fs-5"></i>
+                                                </div>
+                                                {% else %}
+                                                <div class="file-icon bg-secondary bg-opacity-10 rounded p-2 me-3">
+                                                    <i class="bi bi-file-earmark text-secondary fs-5"></i>
+                                                </div>
+                                                {% endif %}
+                                                <div>
+                                                    <span class="fw-medium text-dark">{{ item.name }}</span>
+                                                    {% if current_folder %}
+                                                    <br><small class="text-secondary">{{ current_folder }}/{{
+                                                        ext.upper() if ext != 'unknown' else 'FILE' }}</small>
+                                                    {% else %}
+                                                    <br><small class="text-secondary">{{ ext.upper() if ext != 'unknown'
+                                                        else 'FILE' }}</small>
+                                                    {% endif %}
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {% if item.type == 'folder' %}
+                                            <span class="badge bg-warning text-dark">FOLDER</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary text-white">{{ item.size }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-dark fw-medium">{{ item.modified }}</td>
+                                        <td class="text-center">
+                                            {% if item.type == 'folder' %}
+                                            <div class="d-flex gap-2 justify-content-center">
+                                                <a href="{{ url_for('dashboard', folder_path=item.path) }}"
+                                                    class="btn btn-sm btn-primary shadow-sm"
+                                                    title="Open {{ item.name }}" style="transition: all 0.2s ease;">
+                                                    <i class="bi bi-folder-open"></i> Open
+                                                </a>
+                                                <a href="{{ url_for('download_folder', folder_path=item.path) }}"
+                                                    class="btn btn-sm btn-success shadow-sm download-btn"
+                                                    title="Download {{ item.name }} as ZIP"
+                                                    style="transition: all 0.2s ease;">
+                                                    <i class="bi bi-download"></i> ZIP
+                                                </a>
+                                            </div>
+                                            {% else %}
+                                            <a href="{{ url_for('download_file', filename=item.path) }}"
+                                                class="btn btn-sm btn-success shadow-sm download-btn"
+                                                title="Download {{ item.name }}" style="transition: all 0.2s ease;">
+                                                <i class="bi bi-download"></i> Download
+                                            </a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card shadow">
+                    <div class="card-body text-center py-5">
+                        <i class="bi bi-folder-x text-secondary" style="font-size: 4rem;"></i>
+                        <h4 class="mt-3 text-dark">No Files Available</h4>
+                        <p class="text-dark">No files have been uploaded yet. Contact your administrator to upload
+                            files.</p>
+                        <a href="{{ url_for('upload_file') }}" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Go to Upload Page
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Statistics Card -->
+                <div class="row mt-4">
+                    <div class="col-md-3">
+                        <div class="card bg-dark text-white shadow">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="mb-1 text-white">Total Items</h6>
+                                        <h3 class="mb-0 text-white">{{ files|length }}</h3>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="bi bi-files text-white" style="font-size: 2.5rem; opacity: 0.8;"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-danger text-white shadow">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="mb-1 text-white">Status</h6>
+                                        <h3 class="mb-0 text-white">{{ 'Active' if files else 'Empty' }}</h3>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="bi bi-{{ 'check-circle' if files else 'x-circle' }} text-white"
+                                            style="font-size: 2.5rem; opacity: 0.8;"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white shadow">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="mb-1 text-white">Images</h6>
+                                        <h3 class="mb-0 text-white">{{ image_count }}</h3>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="bi bi-image text-white" style="font-size: 2.5rem; opacity: 0.8;"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white shadow">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="mb-1 text-white">Documents</h6>
+                                        <h3 class="mb-0 text-white">{{ document_count }}</h3>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="bi bi-file-text text-white"
+                                            style="font-size: 2.5rem; opacity: 0.8;"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card mt-4 shadow">
+                    <div class="card-body text-center">
+                        <h6 class="text-dark mb-3">Quick Actions</h6>
+                        <a href="{{ url_for('upload_file') }}" class="btn btn-warning me-2 shadow-sm">
+                            <i class="bi bi-upload"></i> Upload Files
+                        </a>
+                        <a href="{{ url_for('admin_manage') }}" class="btn btn-info me-2 shadow-sm">
+                            <i class="bi bi-gear"></i> Admin Panel
+                        </a>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary me-2">
+                            <i class="bi bi-house"></i> Home
+                        </a>
+                        <button class="btn btn-outline-primary" onclick="location.reload()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-3 mt-5">
+        <div class="container">
+            <p class="mb-0">&copy; 2025 File Share Hub. User Dashboard.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Enhanced download functionality with animations
+        document.querySelectorAll('a[href*="/download/"]').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                const fileName = this.getAttribute('title').replace('Download ', '');
+                console.log('Downloading:', fileName);
+
+                // Add loading state
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="bi bi-hourglass-split"></i> Downloading...';
+                this.classList.add('disabled');
+
+                // Reset button after delay
+                setTimeout(function () {
+                    link.innerHTML = originalText;
+                    link.classList.remove('disabled');
+                }, 2000);
+
+                // Show success toast
+                setTimeout(function () {
+                    showToast('success', 'Download started: ' + fileName, 'bi-check-circle');
+                }, 100);
+            });
+        });
+
+        // Add hover effects to file rows
+        document.querySelectorAll('.file-row').forEach(function (row) {
+            row.addEventListener('mouseenter', function () {
+                this.style.backgroundColor = '#f8f9ff';
+                this.style.transform = 'translateY(-1px)';
+                this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+            });
+
+            row.addEventListener('mouseleave', function () {
+                this.style.backgroundColor = '';
+                this.style.transform = '';
+                this.style.boxShadow = '';
+            });
+        });
+
+        // Enhanced download button hover effects
+        document.querySelectorAll('.download-btn').forEach(function (btn) {
+            btn.addEventListener('mouseenter', function () {
+                this.style.transform = 'scale(1.05)';
+            });
+
+            btn.addEventListener('mouseleave', function () {
+                this.style.transform = 'scale(1)';
+            });
+        });
+
+        // Toast notification function
+        function showToast(type, message, icon) {
+            var bgColor = type === 'success' ? 'bg-success' : 'bg-danger';
+            var toast = document.createElement('div');
+            toast.className = 'toast align-items-center text-white ' + bgColor + ' border-0 position-fixed top-0 end-0 m-3';
+            toast.style.zIndex = '9999';
+            toast.innerHTML = '<div class="d-flex"><div class="toast-body"><i class="bi ' + icon + ' me-2"></i>' + message + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+            document.body.appendChild(toast);
+
+            var bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+
+            // Remove toast after it's hidden
+            toast.addEventListener('hidden.bs.toast', function () {
+                document.body.removeChild(toast);
+            });
+        }
+
+        // Auto-refresh indicator
+        var refreshInterval;
+        function startAutoRefresh() {
+            refreshInterval = setInterval(function () {
+                showToast('success', 'Dashboard refreshed', 'bi-arrow-clockwise');
+                location.reload();
+            }, 60000); // Refresh every minute
+        }
+
+        // Uncomment to enable auto-refresh
+        // startAutoRefresh();
+    </script>
+</body>
+
+</html>
