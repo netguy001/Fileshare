@@ -203,7 +203,10 @@
             `;
         }
 
+        // REAL UPLOAD PROGRESS TRACKING
         document.getElementById('uploadForm').addEventListener('submit', function (e) {
+            e.preventDefault(); // Prevent default form submission
+
             const fileInput = document.getElementById('file');
             const uploadBtn = document.getElementById('uploadBtn');
             const progressBar = document.getElementById('progressBar');
@@ -211,7 +214,6 @@
             const progressText = document.getElementById('progressText');
 
             if (fileInput.files.length === 0) {
-                e.preventDefault();
                 alert('Please select files to upload.');
                 return;
             }
@@ -221,22 +223,56 @@
             uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
             uploadBtn.disabled = true;
 
-            // Simulate progress (since we can't track actual upload progress easily)
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += Math.random() * 30;
-                if (progress > 90) progress = 90;
+            // Create FormData object
+            const formData = new FormData();
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append('file', fileInput.files[i]);
+            }
 
-                progressElement.style.width = progress + '%';
-                progressText.textContent = Math.round(progress) + '%';
-            }, 200);
+            // Create XMLHttpRequest for real progress tracking
+            const xhr = new XMLHttpRequest();
 
-            // Clean up interval when form actually submits
-            setTimeout(() => {
-                clearInterval(interval);
-                progressElement.style.width = '100%';
-                progressText.textContent = '100%';
-            }, 1000);
+            // Track upload progress
+            xhr.upload.addEventListener('progress', function (e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressElement.style.width = percentComplete + '%';
+                    progressText.textContent = Math.round(percentComplete) + '%';
+                }
+            });
+
+            // Handle completion
+            xhr.addEventListener('load', function () {
+                if (xhr.status === 200) {
+                    progressElement.style.width = '100%';
+                    progressText.textContent = '100%';
+
+                    // Show success and redirect after delay
+                    setTimeout(() => {
+                        window.location.href = xhr.responseURL || window.location.href;
+                    }, 500);
+                } else {
+                    // Handle error
+                    progressElement.classList.remove('bg-success');
+                    progressElement.classList.add('bg-danger');
+                    progressText.textContent = 'Upload failed';
+                    uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
+                    uploadBtn.disabled = false;
+                }
+            });
+
+            // Handle errors
+            xhr.addEventListener('error', function () {
+                progressElement.classList.remove('bg-success');
+                progressElement.classList.add('bg-danger');
+                progressText.textContent = 'Upload failed';
+                uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> Upload Files';
+                uploadBtn.disabled = false;
+            });
+
+            // Send the request
+            xhr.open('POST', this.action || window.location.pathname);
+            xhr.send(formData);
         });
 
         // File size validation and preview
